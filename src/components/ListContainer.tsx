@@ -1,23 +1,25 @@
 import React, { useState } from 'react'
 import { List, Task } from '../types';
 import {CSS} from "@dnd-kit/utilities";
-import { useSortable } from '@dnd-kit/sortable';
+import { SortableContext, useSortable } from '@dnd-kit/sortable';
+import TaskCard from './TaskCard';
 
 interface ListContainerProps {
     list: List;
     tasks: Task[];
     onAddTask: (content: string) => void;
+    onUpdateTask: (taskId: string, newContent: string) => void;
 }
 
 function ListContainer(props:ListContainerProps) {
-    const {list, tasks, onAddTask} = props;
+    const {list, tasks, onAddTask, onUpdateTask} = props;
     const [isEditing, setIsEditing] = useState(false);
     const [newTaskContent, setNewTaskContent] = useState('');
 
     const {setNodeRef ,attributes ,listeners ,transition ,transform ,isDragging} = useSortable({
         id:list.id,
         data:{
-            type:"list",
+            type:"List",
             list
         }
     });
@@ -35,25 +37,39 @@ function ListContainer(props:ListContainerProps) {
         }
     };
 
-    const TaskContent = () => (
-        <>
-            <div className='flex p-2 text-lg font-bold cursor-grab rounded-md text-gray-700'>
+    const taskIds = tasks.map(task => task.id);
+
+    return (
+        <div 
+            ref={setNodeRef}
+            style={style}
+            className={`bg-white w-[250px] h-[500px] rounded-md max-h-[500px] flex flex-col shadow-md ${isDragging ? 'opacity-50' : ''}`}
+        >
+            <div 
+                {...attributes} 
+                {...listeners} 
+                className='flex p-2 text-lg font-bold cursor-grab rounded-t-md text-gray-700 bg-gray-50 border-b border-gray-200'
+            >
                 {list.title}
             </div>
             
-            <div className='flex-1 overflow-y-auto p-2 flex flex-col gap-2'>
-                {tasks.map(task => (
-                    <div key={task.id} className='bg-white p-2 rounded-md shadow-sm hover:bg-gray-50 cursor-pointer text-gray-700 border border-gray-200'>
-                        {task.content}
-                    </div>
-                ))}
+            <div className='flex-1 overflow-y-auto p-2 flex flex-col gap-2' onClick={e => e.stopPropagation()}>
+                <SortableContext items={taskIds}>
+                    {tasks.map(task => (
+                        <TaskCard 
+                            key={task.id} 
+                            task={task}
+                            onUpdateTask={onUpdateTask}
+                        />
+                    ))}
+                </SortableContext>
             </div>
 
-            <div className='footer p-2 border-t border-gray-200'>
+            <div className='footer p-2 border-t border-gray-200' onClick={e => e.stopPropagation()}>
                 {isEditing ? (
                     <div className='flex flex-col gap-2'>
                         <textarea
-                            className='w-full bg-white p-2 rounded-md text-sm text-gray-700 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-200'
+                            className='w-full bg-white p-2 rounded-md text-sm text-gray-700 resize-none outline-none focus:ring-2 focus:ring-blue-500/30 border border-gray-200'
                             placeholder='Enter a title for this card...'
                             value={newTaskContent}
                             onChange={(e) => setNewTaskContent(e.target.value)}
@@ -92,20 +108,6 @@ function ListContainer(props:ListContainerProps) {
                     </button>
                 )}
             </div>
-        </>
-    );
-
-    if(isDragging){
-        return (
-            <div ref={setNodeRef} style={style} className='bg-white w-[250px] h-[500px] rounded-md max-h-[500px] flex flex-col opacity-40 shadow-md'>
-                <TaskContent />
-            </div>
-        );
-    }
-
-    return (
-        <div ref={setNodeRef} style={style} {...attributes} {...listeners} className='bg-white w-[250px] h-[500px] rounded-md max-h-[500px] flex flex-col shadow-md'>
-            <TaskContent />
         </div>
     )
 }

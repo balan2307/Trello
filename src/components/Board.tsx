@@ -6,39 +6,74 @@ import { arrayMove, SortableContext} from "@dnd-kit/sortable";
 import { createPortal } from "react-dom";
 import Navbar from "./Navbar";
 import AddList from "./AddList";
+import TaskCard from "./TaskCard";
+import { DragOverEvent } from "@dnd-kit/core";
 
 function Board() {
   const [lists, setLists] = useState<List[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [activeList,setActiveList]=useState<List|null>(null);
+  const [activeList, setActiveList] = useState<List|null>(null);
+  const [activeTask, setActiveTask] = useState<Task|null>(null);
 
-  const sensors=useSensors(useSensor(PointerSensor ,{
-    activationConstraint:{
-      distance:3,
+  const sensors = useSensors(useSensor(PointerSensor, {
+    activationConstraint: {
+      distance: 3,
     }
   }));
 
-  function handleDragStart(event:DragStartEvent){
-    if(event.active.data.current?.type==="list"){
+  function handleDragStart(event: DragStartEvent) {
+    if (event.active.data.current?.type === "List") {
       setActiveList(event.active.data.current.list);
-      return
+      return;
+    }
+
+    if (event.active.data.current?.type === "Task") {
+      setActiveTask(event.active.data.current.task);
+      return;
     }
   }
 
-  function handleDragEnd(event:DragEndEvent){
-    const {active,over}=event;
-    if(!over) return
+  function handleDragEnd(event: DragEndEvent) {
 
-    const sourceListId=active.id;
-    const destinationListId=over.id;
+    setActiveList(null);
+    setActiveTask(null);
 
-    if(sourceListId===destinationListId) return;
+    const {active, over} = event;
+    if (!over) return;
 
-    const sourceListIndex=lists.findIndex((list)=>list.id===sourceListId);
-    const destinationListIndex=lists.findIndex((list)=>list.id===destinationListId);
+    const activeType = active.data.current?.type;
+    const overId = over.id;
 
-    const updateLists= arrayMove(lists, sourceListIndex, destinationListIndex);
-    setLists(updateLists);
+    // Handle list reordering
+    if (activeType === "List") {
+      const sourceListId = active.id;
+      const destinationListId = overId;
+
+      if (sourceListId === destinationListId) return;
+
+      const sourceListIndex = lists.findIndex((list) => list.id === sourceListId);
+      const destinationListIndex = lists.findIndex((list) => list.id === destinationListId);
+
+      const updatedLists = arrayMove(lists, sourceListIndex, destinationListIndex);
+      setLists(updatedLists);
+    }
+
+    // Handle task reordering
+    if (activeType === "Task") {
+      const activeTaskId = active.id;
+      const overTaskId = overId;
+
+      if (activeTaskId === overTaskId) return;
+
+      const activeIndex = tasks.findIndex((t) => t.id === activeTaskId);
+      const overIndex = tasks.findIndex((t) => t.id === overTaskId);
+
+      const updatedTasks = arrayMove(tasks, activeIndex, overIndex);
+      setTasks(updatedTasks);
+    }
+
+    setActiveList(null);
+    setActiveTask(null);
   }
 
   const handleAddTask = (listId: string, content: string) => {
@@ -57,21 +92,72 @@ function Board() {
     ]);
   }
 
+  const handleUpdateTask = (taskId: string, newContent: string) => {
+    setTasks(tasks.map(task => 
+      task.id === taskId ? { ...task, content: newContent } : task
+    ));
+  };
+
+  function handleDragOver(event: DragOverEvent) {
+    const {active, over } = event;
+    if(!over) return; 
+
+    const activeTaskId = active.id;
+    const overTaskId = over.id;
+
+    if (activeTaskId === overTaskId) return;
+
+    
+    const isActiveTask = active.data.current?.type === "Task";
+    const isOverTask = over.data.current?.type === "Task";
+
+    if(!isActiveTask)  return
+
+    if(isActiveTask && isOverTask){
+    setTasks((tasks)=>{
+      const activeIndex = tasks.findIndex((t) => t.id === activeTaskId);
+      const overIndex = tasks.findIndex((t) => t.id === overTaskId);
+
+    
+        tasks[activeIndex].listId = tasks[overIndex].listId;
+       
+      
+      const newTasks = arrayMove(tasks, activeIndex, overIndex);
+      return newTasks;
+    })
+      
+    }
+
+    const isOverList = over.data.current?.type === "List";
+    if(isActiveTask && isOverList){
+
+      setTasks((tasks)=>{
+        const activeIndex = tasks.findIndex((t) => t.id === activeTaskId);
+        const overIndex = tasks.length - 1;
+        tasks[activeIndex].listId = over.id.toString();
+        return arrayMove(tasks, activeIndex, overIndex);
+      })
+
+    }
+    
+  }
+
   return (
     <div className="fixed inset-0 flex flex-col">
       <Navbar />
 
       {/* Board Content */}
       <div className="flex-1 overflow-x-auto p-4 bg-[#E2E4E9]">
-        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} sensors={sensors}>
+        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={handleDragOver}  sensors={sensors}>
           <div className="flex gap-4 min-w-max pb-4">
             <SortableContext items={lists.map((list) => list.id)}>
               {lists.map((list) => (
                 <ListContainer 
-                  key={list.id} 
-                  list={list} 
+                  key={list.id}
+                  list={list}
                   tasks={tasks.filter(task => task.listId === list.id)}
                   onAddTask={(content) => handleAddTask(list.id, content)}
+                  onUpdateTask={handleUpdateTask}
                 />
               ))}
             </SortableContext>
@@ -85,9 +171,16 @@ function Board() {
             <DragOverlay>
               {activeList && (
                 <ListContainer 
-                  list={activeList} 
+                  list={activeList}
                   tasks={tasks.filter(task => task.listId === activeList.id)}
                   onAddTask={(content) => handleAddTask(activeList.id, content)}
+                  onUpdateTask={handleUpdateTask}
+                />
+              )}
+              {activeTask && (
+                <TaskCard 
+                  task={activeTask}
+                  onUpdateTask={handleUpdateTask}
                 />
               )}
             </DragOverlay>,
