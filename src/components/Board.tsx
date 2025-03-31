@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { List, Task } from "../types";
 import ListContainer from "./ListContainer";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -8,10 +8,11 @@ import Navbar from "./Navbar";
 import AddList from "./AddList";
 import TaskCard from "./TaskCard";
 import { DragOverEvent } from "@dnd-kit/core";
+import useLocalStorage from "../hooks/useLocalStorage";
 
 function Board() {
-  const [lists, setLists] = useState<List[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [lists, setLists] = useLocalStorage<List[]>("kanban-lists", []);
+  const [tasks, setTasks] = useLocalStorage<Task[]>("kanban-tasks", []);
   const [activeList, setActiveList] = useState<List|null>(null);
   const [activeTask, setActiveTask] = useState<Task|null>(null);
 
@@ -44,31 +45,26 @@ function Board() {
     const activeType = active.data.current?.type;
     const overId = over.id;
 
-    // Handle list reordering
     if (activeType === "List") {
       const sourceListId = active.id;
       const destinationListId = overId;
 
       if (sourceListId === destinationListId) return;
-
-      const sourceListIndex = lists.findIndex((list) => list.id === sourceListId);
-      const destinationListIndex = lists.findIndex((list) => list.id === destinationListId);
-
-      const updatedLists = arrayMove(lists, sourceListIndex, destinationListIndex);
+      const sourceListIndex = lists.findIndex((list: List) => list.id === sourceListId);
+      const destinationListIndex = lists.findIndex((list: List) => list.id === destinationListId);
+      const updatedLists = arrayMove(lists as List[], sourceListIndex, destinationListIndex);
       setLists(updatedLists);
     }
 
-    // Handle task reordering
     if (activeType === "Task") {
       const activeTaskId = active.id;
       const overTaskId = overId;
 
       if (activeTaskId === overTaskId) return;
 
-      const activeIndex = tasks.findIndex((t) => t.id === activeTaskId);
-      const overIndex = tasks.findIndex((t) => t.id === overTaskId);
-
-      const updatedTasks = arrayMove(tasks, activeIndex, overIndex);
+      const activeIndex = tasks.findIndex((t: Task) => t.id === activeTaskId);
+      const overIndex = tasks.findIndex((t: Task) => t.id === overTaskId);
+      const updatedTasks = arrayMove(tasks as Task[], activeIndex, overIndex);
       setTasks(updatedTasks);
     }
 
@@ -91,15 +87,14 @@ function Board() {
       { id: crypto.randomUUID(), title },
     ]);
   }
-
   const handleUpdateTask = (taskId: string, newContent: string) => {
-    setTasks(tasks.map(task => 
+    setTasks(tasks.map((task: Task) => 
       task.id === taskId ? { ...task, content: newContent } : task
     ));
   };
 
   function handleDragOver(event: DragOverEvent) {
-    const {active, over } = event;
+    const {active, over} = event;
     if(!over) return; 
 
     const activeTaskId = active.id;
@@ -107,57 +102,82 @@ function Board() {
 
     if (activeTaskId === overTaskId) return;
 
-    
     const isActiveTask = active.data.current?.type === "Task";
     const isOverTask = over.data.current?.type === "Task";
 
-    if(!isActiveTask)  return
+    if (!isActiveTask) return;
 
-    if(isActiveTask && isOverTask){
-    setTasks((tasks)=>{
-      const activeIndex = tasks.findIndex((t) => t.id === activeTaskId);
-      const overIndex = tasks.findIndex((t) => t.id === overTaskId);
+    if (isActiveTask && isOverTask) {
+      setTasks((prevTasks: Task[]) => {
+        const activeIndex = prevTasks.findIndex((t) => t.id === activeTaskId);
+        const overIndex = prevTasks.findIndex((t) => t.id === overTaskId);
 
-    
-        tasks[activeIndex].listId = tasks[overIndex].listId;
-       
-      
-      const newTasks = arrayMove(tasks, activeIndex, overIndex);
-      return newTasks;
-    })
-      
+        const updatedTasks = [...prevTasks];
+        updatedTasks[activeIndex] = {
+          ...updatedTasks[activeIndex],
+          listId: updatedTasks[overIndex].listId
+        };
+
+        return arrayMove(updatedTasks, activeIndex, overIndex);
+      });
     }
 
     const isOverList = over.data.current?.type === "List";
-    if(isActiveTask && isOverList){
-
-      setTasks((tasks)=>{
-        const activeIndex = tasks.findIndex((t) => t.id === activeTaskId);
-        const overIndex = tasks.length - 1;
-        tasks[activeIndex].listId = over.id.toString();
-        return arrayMove(tasks, activeIndex, overIndex);
-      })
-
+    if (isActiveTask && isOverList) {
+      setTasks((prevTasks: Task[]) => {
+        const activeIndex = prevTasks.findIndex((t) => t.id === activeTaskId);
+        const updatedTasks = [...prevTasks];
+        updatedTasks[activeIndex] = {
+          ...updatedTasks[activeIndex],
+          listId: over.id.toString()
+        };
+        
+        return arrayMove(updatedTasks, activeIndex, activeIndex);
+      });
     }
-    
   }
+
+  const handleDeleteTask = (taskId: string) => {
+    setTasks((prevTasks: Task[]) => prevTasks.filter((task: Task) => task.id !== taskId));
+  };
+
+  const handleReset = () => {
+    setLists([]);
+    setTasks([]);
+  };
+
+  const handleDeleteList = (listId: string) => {
+    setLists((prevLists: List[]) => prevLists.filter(list => list.id !== listId));
+    setTasks((prevTasks: Task[]) => prevTasks.filter(task => task.listId !== listId));
+  };
+
+  const handleUpdateList = (listId: string, newTitle: string) => {
+    setLists((prevLists: List[]) => 
+      prevLists.map(list => 
+        list.id === listId ? { ...list, title: newTitle } : list
+      )
+    );
+  };
 
   return (
     <div className="fixed inset-0 flex flex-col">
-      <Navbar />
+      <Navbar onReset={handleReset} />
 
-      {/* Board Content */}
+    
       <div className="flex-1 overflow-x-auto p-4 bg-[#E2E4E9]">
-        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={handleDragOver}  sensors={sensors}>
+        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={handleDragOver} sensors={sensors}>
           <div className="flex gap-4 min-w-max pb-4">
-            <SortableContext items={lists.map((list) => list.id)}>
-              {lists.map((list) => (
+            <SortableContext items={lists.map((list: List) => list.id)}>
+              {lists.map((list: List) => (
                 <ListContainer 
                   key={list.id}
                   list={list}
-                  tasks={tasks.filter(task => task.listId === list.id)}
+                  tasks={tasks.filter((task: Task) => task.listId === list.id)}
                   onAddTask={(content) => handleAddTask(list.id, content)}
                   onUpdateTask={handleUpdateTask}
+                  onDeleteTask={handleDeleteTask}
+                  onDeleteList={handleDeleteList}
+                  onUpdateList={handleUpdateList}
                 />
               ))}
             </SortableContext>
@@ -172,15 +192,19 @@ function Board() {
               {activeList && (
                 <ListContainer 
                   list={activeList}
-                  tasks={tasks.filter(task => task.listId === activeList.id)}
+                  tasks={tasks.filter((task: Task) => task.listId === activeList.id)}
                   onAddTask={(content) => handleAddTask(activeList.id, content)}
                   onUpdateTask={handleUpdateTask}
+                  onDeleteTask={handleDeleteTask}
+                  onDeleteList={handleDeleteList}
+                  onUpdateList={handleUpdateList}
                 />
               )}
               {activeTask && (
                 <TaskCard 
                   task={activeTask}
                   onUpdateTask={handleUpdateTask}
+                  onDeleteTask={handleDeleteTask}
                 />
               )}
             </DragOverlay>,

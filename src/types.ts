@@ -9,6 +9,8 @@ export interface Task {
     id: string;
     content: string;
     listId: string;
+    description?: string;
+    dueDate?: string;
 }
 
 
