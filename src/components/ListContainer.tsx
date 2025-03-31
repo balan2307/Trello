@@ -115,7 +115,7 @@ function ListContainer(props: ListContainerProps) {
                 </SortableContext>
             </div>
 
-            <div className='mt-auto p-2 border-t border-gray-200 shrink-0 bg-white' onClick={e => e.stopPropagation()}>
+            <div className='mt-auto p-2 border-gray-200 shrink-0 bg-white' onClick={e => e.stopPropagation()}>
                 {isEditing ? (
                     <div className='flex flex-col gap-2'>
                         <textarea
